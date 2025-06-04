@@ -53,9 +53,9 @@ If you want the script to process VM vdisks -
 
 ### Additional User-Defined Datasets:
 
-This is where you can add other datasets (non appdata ot vm ones)  to be processed by the script:
+This is where you can add other datasets (non appdata or vm ones) to be processed by the script:
 
-- `source_datasets_array`: Specify custom paths in the format pool/dataset, e.g., "tank/mydata".
+- `source_datasets_array`: Specify custom paths in the form of `"pool/dataset"`, e.g., `"tank/mydata"`. You can add whole ZFS disks to be watched for folders, e.g., `"disk1`" for the first disk in your array.
 
 
 ## Running the Script
