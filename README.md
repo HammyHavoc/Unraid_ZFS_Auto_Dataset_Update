@@ -19,7 +19,8 @@ The script will do the following
 
 Before using the script, ensure the following:
 
--   Unraid server (version 6.12 or higher) with ZFS support.
+-   You have installed Unraid server (version 6.12 or higher)
+-   Your Unraid server has ZFS-formatted drives in your array or pool(s) ready to be used.
 -   [User Scripts](https://forums.unraid.net/topic/48286-plugin-user-scripts/) plugin is installed.
 -   (Optional) [ZFS Master plugin](https://forums.unraid.net/topic/122261-plugin-zfs-master/) plugin is installed for enhanced ZFS functionality.
 -   Plugins are installed via Unraid's Community Apps
