@@ -557,7 +557,38 @@ To: $dataset_name" "normal" "resume_operations"
             
             if [ $validation_result -eq 0 ]; then
               echo "Validation successful. Cleaning up temp directory."
-              rm -rf "$tmp_dir"
+              echo "This may take several minutes for large directories..."
+              
+              # Get initial size for progress feedback
+              if command -v du >/dev/null 2>&1; then
+                temp_size=$(du -sh "$tmp_dir" 2>/dev/null | cut -f1)
+                echo "Deleting temp directory ($temp_size): $tmp_dir"
+              fi
+              
+              # Use background process with periodic updates for large deletions
+              if [ $(find "$tmp_dir" -type f | wc -l) -gt 10000 ]; then
+                echo "Large directory detected. Starting background cleanup with progress updates..."
+                (
+                  rm -rf "$tmp_dir" 
+                  echo "CLEANUP_COMPLETE:$tmp_dir" >> /tmp/zfs_converter_cleanup.log
+                ) &
+                cleanup_pid=$!
+                
+                # Monitor cleanup progress
+                while kill -0 $cleanup_pid 2>/dev/null; do
+                  if [ -d "$tmp_dir" ]; then
+                    remaining=$(find "$tmp_dir" -type f 2>/dev/null | wc -l)
+                    echo "Cleanup in progress... $remaining files remaining"
+                  fi
+                  sleep 10
+                done
+                wait $cleanup_pid
+                echo "Background cleanup completed."
+              else
+                rm -rf "$tmp_dir"
+              fi
+              
+              echo "Temp directory cleanup completed: $tmp_dir"
               converted_folders+=("${mount_point}/${source_path}/${temp_base}")
             elif [ $validation_result -eq 2 ]; then
               echo "Validation completed with warnings. Manual verification recommended."
@@ -594,8 +625,9 @@ Rsync exit status: $rsync_exit_status" "alert" "errors"
         if [ "$dry_run" != "yes" ]; then
           if zfs create "$dataset_name"; then
             echo "Dataset created successfully. Copying data..."
-            rsync -a --progress "$tmp_dir/" "$dataset_mountpoint/"
+            rsync -a "$tmp_dir/" "$dataset_mountpoint/"
             rsync_exit_status=$?
+            echo "Rsync completed with exit status: $rsync_exit_status"
             
             if [ $rsync_exit_status -eq 0 ] && [ "$cleanup" = "yes" ]; then
               perform_validation "${mount_point}/${source_path}/${normalized_temp_base}_temp" "${mount_point}/${source_path}/${normalized_temp_base}" "copy operation"
@@ -603,7 +635,35 @@ Rsync exit status: $rsync_exit_status" "alert" "errors"
               
               if [ $validation_result -eq 0 ]; then
                 echo "Validation successful. Cleaning up temp directory."
-                rm -rf "${mount_point}/${source_path}/${normalized_temp_base}_temp"
+                echo "This may take several minutes for large directories..."
+                
+                if command -v du >/dev/null 2>&1; then
+                  temp_size=$(du -sh "${mount_point}/${source_path}/${normalized_temp_base}_temp" 2>/dev/null | cut -f1)
+                  echo "Deleting temp directory ($temp_size): ${mount_point}/${source_path}/${normalized_temp_base}_temp"
+                fi
+                
+                temp_cleanup_path="${mount_point}/${source_path}/${normalized_temp_base}_temp"
+                if [ $(find "$temp_cleanup_path" -type f | wc -l) -gt 10000 ]; then
+                  echo "Large directory detected. Starting background cleanup..."
+                  (
+                    rm -rf "$temp_cleanup_path"
+                    echo "CLEANUP_COMPLETE:$temp_cleanup_path" >> /tmp/zfs_converter_cleanup.log
+                  ) &
+                  cleanup_pid=$!
+                  
+                  while kill -0 $cleanup_pid 2>/dev/null; do
+                    if [ -d "$temp_cleanup_path" ]; then
+                      remaining=$(find "$temp_cleanup_path" -type f 2>/dev/null | wc -l)
+                      echo "Cleanup in progress... $remaining files remaining"
+                    fi
+                    sleep 10
+                  done
+                  wait $cleanup_pid
+                  echo "Background cleanup completed."
+                else
+                  rm -rf "$temp_cleanup_path"
+                fi
+                
                 converted_folders+=("${mount_point}/${source_path}/${temp_base}")
               elif [ $validation_result -eq 2 ]; then
                 echo "Validation completed with warnings. Manual verification recommended."
@@ -638,7 +698,8 @@ Available: $(numfmt --to=iec $(zfs list -o avail -p -H "${source_path}"))" "warn
   if [ "$temp_dirs_found" = false ]; then
     echo "No temp directories found in ${source_path}. No interrupted conversions to resume."
   fi
-
+  
+  echo "Completed temp directory processing for ${source_path}"
   echo "Resume check completed. Proceeding with normal processing..."
   echo "---"
   
@@ -684,7 +745,37 @@ Path: $entry" "warning" "warnings"
                 
                 if [ $validation_result -eq 0 ]; then
                   echo "Validation successful, cleanup can proceed."
-                  rm -r "${mount_point}/${source_path}/${normalized_base_entry}_temp"
+                  echo "This may take several minutes for large directories..."
+                  
+                  temp_path="${mount_point}/${source_path}/${normalized_base_entry}_temp"
+                  if command -v du >/dev/null 2>&1; then
+                    temp_size=$(du -sh "$temp_path" 2>/dev/null | cut -f1)
+                    echo "Deleting temp directory ($temp_size): $temp_path"
+                  fi
+                  
+                  # Use background process for large deletions
+                  if [ $(find "$temp_path" -type f | wc -l) -gt 10000 ]; then
+                    echo "Large directory detected. Starting background cleanup..."
+                    (
+                      rm -r "$temp_path"
+                      echo "CLEANUP_COMPLETE:$temp_path" >> /tmp/zfs_converter_cleanup.log
+                    ) &
+                    cleanup_pid=$!
+                    
+                    # Monitor cleanup progress
+                    while kill -0 $cleanup_pid 2>/dev/null; do
+                      if [ -d "$temp_path" ]; then
+                        remaining=$(find "$temp_path" -type f 2>/dev/null | wc -l)
+                        echo "Cleanup in progress... $remaining files remaining"
+                      fi
+                      sleep 10
+                    done
+                    wait $cleanup_pid
+                    echo "Background cleanup completed."
+                  else
+                    rm -r "$temp_path"
+                  fi
+                  
                   converted_folders+=("$entry")  # Save the name of the converted folder
                 elif [ $validation_result -eq 2 ]; then
                   echo "Validation completed with warnings. Manual verification recommended."
@@ -721,6 +812,8 @@ Path: $entry" "warning" "space_issues"
       fi
     fi
   done
+  
+  echo "Completed processing all entries in ${source_path}"
 }
 
 
@@ -729,11 +822,17 @@ Path: $entry" "warning" "space_issues"
 # this function prints what has been converted
 #
 print_new_datasets() {
- echo "The following folders were successfully converted to datasets:"
-for folder in "${converted_folders[@]}"; do
-  echo "$folder"
-done
-    }
+echo "Printing conversion summary..."
+if [ ${#converted_folders[@]} -gt 0 ]; then
+  echo "The following folders were successfully converted to datasets:"
+  for folder in "${converted_folders[@]}"; do
+    echo "$folder"
+  done
+else
+  echo "No folders were converted to datasets."
+fi
+echo "Summary printing completed."
+}
     
 #----------------------------------------------------------------------------------    
 # this function checks if there any folders to covert in the array and if not exits. Also checks sources are valid locations
@@ -806,9 +905,13 @@ Please verify your configuration." "alert" "errors"
 # this function runs through a loop sending all datasets to process the create_datasets
 #
 convert() {
+echo "Starting conversion process..."
 for dataset in "${source_datasets_array[@]}"; do
+  echo "Processing dataset: $dataset"
   create_datasets "$dataset"
+  echo "Completed processing dataset: $dataset"
 done
+echo "Conversion process completed."
 }
 
 #--------------------------------
@@ -822,14 +925,30 @@ else
   send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Started" "Script started. Converting folders to ZFS datasets." "normal" "script_start"
 fi
 
+echo "Starting main script execution..."
+
+echo "Step 1: Checking if work is needed..."
 can_i_go_to_work
+
+echo "Step 2: Stopping Docker containers if needed..."
 stop_docker_containers
+
+echo "Step 3: Stopping virtual machines if needed..."
 stop_virtual_machines
+
+echo "Step 4: Starting conversion process..."
 convert
+
+echo "Step 5: Restarting Docker containers..."
 start_docker_containers
+
+echo "Step 6: Restarting virtual machines..."
 start_virtual_machines
+
+echo "Step 7: Printing results..."
 print_new_datasets
 
+echo "Step 8: Sending completion notifications..."
 # Send script completion notification
 total_converted=${#converted_folders[@]}
 if [ "$total_converted" -gt 0 ]; then
@@ -843,3 +962,11 @@ $conversion_list" "normal" "script_completion"
 else
   send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Completed" "Script completed. No folders needed conversion - all are already datasets." "normal" "script_completion"
 fi
+
+echo "Script execution completed successfully."
+echo "All operations finished."
+
+# Clean up any temporary monitoring files
+rm -f /tmp/zfs_converter_cleanup.log 2>/dev/null
+
+echo "Final status: Script has completely finished execution."
