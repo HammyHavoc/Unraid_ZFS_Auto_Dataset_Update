@@ -12,7 +12,9 @@ Set to operate on a schedule via Unraid user scripts, this tool then can continu
 > ## Disclaimer
 >While this script has been thoroughly tested and is believed to be reliable, unforeseen edge cases may arise. By using this software, you acknowledge potential risks and agree to use it at your own discretion. The author assumes no responsibility for any unintended outcomes.
 >
-> Please use it wisely and responsibly. Remember: a single dataset and snapshots tha only exist on the same disk are not a backup.
+> Please use it wisely and responsibly.
+>
+> Remember: a single dataset and snapshots tha only exist on the same disk are not a backup.
 
 ## Overview
 
