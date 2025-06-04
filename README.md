@@ -147,6 +147,10 @@ Whilst the below are very much huge simplifications, allowing less experienced u
 > If you need a few files or dirs, rather than rolling back a whole dataset, it is instead recommended to `cd .zfs` in the top level path of a dataset. The `.zfs` is not a user-visible path within the tree, but you can `cd` in and copy your file(s) out without needing to roll back a snapshot. You cannot move files or change files within the snapshot itself, you can only copy data out of it.
 >
 > An alternative solution to using `cd .zfs` is in duplicating to a different target dataset and experimenting with rolling back to different snapshots on a new dataset instead of your current one.
+>
+> It is always recommended to `hold` at least one snapshot, meaning the snapshot can never be destroyed automatically until the hold is released. The snapshot you hold should be the best and sometimes most recent version when you transfer your data into a dataset, or convert a folder/dir into a dataset. This can enable you to undo future potential problems.
+>
+> For the people at the back: ZFS snapshots on a single disk are not a backup.
 
 ## How the Script Works
 
