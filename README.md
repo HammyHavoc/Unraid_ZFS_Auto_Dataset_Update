@@ -1,7 +1,7 @@
 # Unraid Auto Dataset Watcher & Converter v2
 
 
-This script is  for  converting directories into ZFS datasets on an Unraid server and runs in the User Scripts plugin.
+This script is for converting directories into ZFS datasets on an Unraid server and runs in the User Scripts plugin.
 It's proficient in processing appdata from Docker Containers, vdisks from VMs and various other locations within a single run.
 
 For directories storing appdata or VM vdisk data, the script is able to detect active containers or VMs that are using these folders. It will automatically stop these containers or VMs prior to initiating the conversion.
@@ -50,7 +50,7 @@ If you want the script to process Docker appdata -
 
 If you want the script to process VM vdisks -
 
-- `should_process_vms`: Set to "yes" this tells the script the location  contains vdisks  so it can safely deal with it.
+- `should_process_vms`: Set to "yes" this tells the script the location contains vdisks, allowing it to safely handle this specific usage scenario.
 - `source_pool_where_vm_domains_are`: Specify the source pool containing the VM domains.
 - `source_dataset_where_vm_domains_are`: Specify the source dataset for VM domains.
 - `vm_forceshutdown_wait`: Duration (in seconds) to wait before force stopping a VM if it doesn't shut down gracefully.
@@ -67,7 +67,7 @@ This is where you can add other datasets (non appdata or vm ones) to be processe
 After you have configured the script, follow these steps:
 
 1.  Save any changes you've made to the script.
-2.  Run the script using the User Scripts plugin. For the initial run, if there are a significant number of folders requiring conversion, click  the 'Run in Background' button. This ensures that you won't have to keep the browser window open, as closing it would otherwise terminate the script.
+2.  Run the script using the User Scripts plugin. For the initial run, if there are a significant number of folders requiring conversion, click the 'Run in Background' button. This ensures that you won't have to keep the browser window open, as closing it would otherwise terminate the script.
 3.  Configure the script to operate on a schedule that suits your needs, ensuring automated and timely conversions.
 
 ------------------------------------------------------------------
@@ -127,7 +127,7 @@ _Key Concepts_:
 -   **rsync**: A fast, versatile utility for copying files and directories. It's often used for mirroring and backups. Keeps timestamps and permissions etc
     
 
-**How script  Works**:
+**How the Script Works**:
 
 1.  The script first checks whether it should process Docker containers or VMs based on the user's settings.
 2.  For Docker containers, the script examines their bind mounts. If any bind mount's true location resides inside a regular folder (and not a ZFS dataset) in the designated source path for appdata, that container is stopped.
