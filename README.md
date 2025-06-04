@@ -125,12 +125,20 @@ After you have configured the script, follow these steps:
 
 ## Key Concepts
 
+Whilst the below are very much huge simplifications, allowing less experienced users to grasp the fundamental concepts of ZFS is helpful for troubleshooting and avoiding disaster.
+
 -   **Bind Mount**: A type of mount where a source directory or file is superimposed onto a destination, making its contents accessible from the destination. Used heavily in Unraid Docker templates.
     
--   **ZFS Dataset**: A ZFS dataset can be thought of as a sort of advanced folder with features like compression, quota, and snapshot capabilities.
+-   **ZFS Dataset**: A ZFS dataset could be likened to an advanced folder with features like compression, quota, and snapshot capabilities. Though more experienced users may find likening them to the concept of a subvolume within a disk or pool to be more helpful.
     
--   **rsync**: A fast, versatile utility for copying files and directories. It's often used for mirroring and backups. Keeps timestamps and permissions etc
-    
+-   **rsync**: A fast, versatile utility for copying files and directories. It's often used for mirroring and backups. Keeps timestamps and permissions etc.
+
+-   **Snaphots**: Snapshots are information that exists outside of the user filesystem and allows the ZFS filesystem to log changes between snapshots, meaning you can undo bad changes and file deletions.
+  
+> [!CAUTION]
+> Whilst you can roll back a snapshot, you can never revert to a snapshot that was taken at a later time. Ergo, you cannot return to the present point prior to rolling back the snapshot. The dataset has changed permanently. This highlights why a single dataset without replication of the data and snapshots is not a backup solution. This is the reason you would want this script, so that you can have more than one copy of your data and snapshots. Rolling back a snapshot is similar to 'undo', but there is no 'redo' on a sole dataset.
+> If you need a few files or dirs, rather than rolling back a whole dataset, it is instead recommended to `cd .zfs` in the top level path of a dataset. The `.zfs` is not a user-visible path within the tree, but you can `cd` in and copy your file(s) out without needing to roll back a snapshot. You cannot move files or change files within the snapshot itself, you can only copy data out of it.
+> An alternative solution to using `cd .zfs` is in duplicating to a different target dataset and experimenting with rolling back to different snapshots on a new dataset instead of your current one.
 
 ## How the Script Works
 
