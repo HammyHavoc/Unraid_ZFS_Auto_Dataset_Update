@@ -5,8 +5,9 @@ It's proficient in processing appdata from Docker Containers, vdisks from VMs an
 
 For directories storing appdata or VM vdisk data, the script is able to detect active containers or VMs that are using these folders. It will automatically stop these containers or VMs prior to initiating the conversion.
 
-Set to operate on a schedule via Unraid user scripts, this tool then can continue to monitor datasets, making certain that their associated child folders remain as datasets. When, for example, creating a new Docker container, its appdata will be converted automatically when this script runs. Such functionality is invaluable for users keen on snapshotting individual containers, VMs, or various data structures.
+Set to operate on a schedule via Unraid user scripts, this tool then can continue to monitor datasets, making certain that their associated child folders remain as datasets. When, for example, creating a new Docker container, its appdata will be converted automatically when this script runs.
 
+Such functionality is invaluable for users keen on snapshotting individual containers, VMs, or various data structures.
 
 > [!WARNING]
 > ## Disclaimer
