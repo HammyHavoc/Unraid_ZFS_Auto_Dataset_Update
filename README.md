@@ -1,12 +1,17 @@
 # Unraid Auto Dataset Watcher & Converter v2
 
-
 This script is for converting directories into ZFS datasets on an Unraid server and runs in the User Scripts plugin.
 It's proficient in processing appdata from Docker Containers, vdisks from VMs and various other locations within a single run.
 
 For directories storing appdata or VM vdisk data, the script is able to detect active containers or VMs that are using these folders. It will automatically stop these containers or VMs prior to initiating the conversion.
 
 Set to operate on a schedule via Unraid user scripts, this tool then can continue to monitor datasets, making certain that their associated child folders remain as datasets. When, for example, creating a new Docker container, its appdata will be converted automatically when this script runs. Such functionality is invaluable for users keen on snapshotting individual containers, VMs, or various data structures.
+
+
+> [!WARNING]
+> ## Disclaimer
+>While this script has been thoroughly tested and is believed to be reliable, unforeseen edge cases may arise. By using this software, you acknowledge potential risks and agree to use it at your own discretion. The author assumes no responsibility for any unintended outcomes.
+> Please use it wisely and responsibly. Remember: a single dataset and snapshots tha only exist on the same disk are not a backup.
 
 ## Overview
 
@@ -73,7 +78,7 @@ After you have configured the script, follow these steps:
 ------------------------------------------------------------------
 ------------------------------------------------------------------
 
-**Simplified Working Principle:**
+## Simplified Working Principle
 
 1.  **Initialization**:
     
@@ -118,7 +123,7 @@ After you have configured the script, follow these steps:
     
     -   The script logs all actions taken, from the initial dataset path checks to the stopping and restarting of containers and VMs.
 
-_Key Concepts_:
+## Key Concepts
 
 -   **Bind Mount**: A type of mount where a source directory or file is superimposed onto a destination, making its contents accessible from the destination. Used heavily in Unraid Docker templates.
     
@@ -127,7 +132,7 @@ _Key Concepts_:
 -   **rsync**: A fast, versatile utility for copying files and directories. It's often used for mirroring and backups. Keeps timestamps and permissions etc
     
 
-**How the Script Works**:
+## How the Script Works
 
 1.  The script first checks whether it should process Docker containers or VMs based on the user's settings.
 2.  For Docker containers, the script examines their bind mounts. If any bind mount's true location resides inside a regular folder (and not a ZFS dataset) in the designated source path for appdata, that container is stopped.
@@ -136,15 +141,8 @@ _Key Concepts_:
 5.  Once the conversion process is done, the script restarts the containers and VMs it had stopped.
 6. Prints results
 
-**CONTRIBUTE TO THE PROJECT**
+## Contribute to the Project
 
 Your insights and expertise can make a difference! If you've identified improvements or have suggestions for the script, I'd truly appreciate your contributions. Help me make this tool even better.
 
 I'm open to feedback, code enhancements, or new ideas.
-
-
-**DISCLAIMER**
-
-While this script has been thoroughly tested and is believed to be reliable, unforeseen edge cases may arise. By using this software, you acknowledge potential risks and agree to use it at your own discretion. The author assumes no responsibility for any unintended outcomes.
-
-Use wisely and responsibly!!!
