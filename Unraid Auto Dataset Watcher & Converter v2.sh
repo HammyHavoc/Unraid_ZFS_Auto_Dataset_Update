@@ -36,7 +36,7 @@ source_dataset_where_vm_domains_are="domains"        # source domains dataset
 vm_forceshutdown_wait="90"                           # how long to wait for vm to shutdown without force stopping it
 
 # Additional User-Defined Datasets
-# Add more paths as needed in the format pool/dataset in quotes, for example: "tank/mydata"
+# Specify your paths in the form of `"pool/dataset"`, e.g., `"tank/mydata"`. You can add whole ZFS formatted disks to be watched for folders, e.g., `"disk1"` for the first disk in your array.
 source_datasets_array=(
   # ... user-defined paths here ...
 )
