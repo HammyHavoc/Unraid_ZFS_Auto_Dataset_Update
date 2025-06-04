@@ -64,7 +64,7 @@ If you want the script to process VM vdisks -
 
 This is where you can add other datasets (non appdata or vm ones) to be processed by the script:
 
-- `source_datasets_array`: Specify custom paths in the form of `"pool/dataset"`, e.g., `"tank/mydata"`. You can add whole ZFS disks to be watched for folders, e.g., `"disk1`" for the first disk in your array.
+- `source_datasets_array`: Specify your paths in the form of `"pool/dataset"`, e.g., `"tank/mydata"`. You can add whole ZFS formatted disks to be watched for folders, e.g., `"disk1"` for the first disk in your array. If in doubt, check the GUI of the ZFS Master plugin in `Main` on your Unraid dashboard, and the correct name will be visible in the `ZFS Master` section of the page.
 
 
 ## Running the Script
