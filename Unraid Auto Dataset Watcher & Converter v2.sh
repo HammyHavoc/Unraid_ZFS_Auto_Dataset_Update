@@ -21,6 +21,24 @@
 # real run or dry run
 dry_run="no"  # Set to "yes" for a dry run. Change to "no" to run for real
 
+# ---------------------------------------
+# Notification Settings
+# ---------------------------------------
+
+# Enable/disable notifications
+enable_notifications="yes"  # Set to "yes" to enable Unraid notifications, "no" to disable
+
+# Configure which events to notify about (set to "yes" to enable each type)
+notify_script_start="yes"           # Script started
+notify_script_completion="yes"      # Script completed successfully  
+notify_conversion_summary="yes"     # Summary of folders converted
+notify_errors="yes"                 # Errors and failures
+notify_warnings="yes"               # Warnings (validation issues, insufficient space, etc.)
+notify_resume_operations="yes"      # When resuming interrupted conversions
+notify_container_vm_stops="yes"     # When containers/VMs are stopped/started
+notify_space_issues="yes"           # When skipping due to insufficient space
+
+# ---------------------------------------
 # Paths
 # ---------------------------------------
 
@@ -69,6 +87,45 @@ buffer_zone=11
 #--------------------------------
 #     FUNCTIONS START HERE      #
 #--------------------------------
+
+#----------------------------------------------------------------------------------    
+# this function sends Unraid notifications
+#
+send_notification() {
+  local event="$1"
+  local subject="$2" 
+  local description="$3"
+  local importance="$4"  # normal, warning, or alert
+  local notification_type="$5"  # Which notification setting to check
+  
+  # Check if notifications are enabled globally
+  if [ "$enable_notifications" != "yes" ]; then
+    return 0
+  fi
+  
+  # Check if this specific notification type is enabled
+  local notify_var="notify_${notification_type}"
+  local notify_enabled="${!notify_var}"
+  if [ "$notify_enabled" != "yes" ]; then
+    return 0
+  fi
+  
+  # Don't send notifications in dry run mode (except for dry run start notification)
+  if [ "$dry_run" = "yes" ] && [ "$notification_type" != "script_start" ]; then
+    echo "Dry Run: Would send notification - $event: $subject"
+    return 0
+  fi
+  
+  # Send the notification with proper line break formatting
+  if command -v /usr/local/emhttp/webGui/scripts/notify >/dev/null 2>&1; then
+    # Use printf to properly format the description with line breaks
+    local formatted_description=$(printf "%b" "$description")
+    /usr/local/emhttp/webGui/scripts/notify -e "$event" -s "$subject" -d "$formatted_description" -i "$importance"
+    echo "Notification sent: $subject"
+  else
+    echo "Unraid notify command not found. Notification skipped: $subject"
+  fi
+}
 
 #-------------------------------------------------------------------------------------------------
 # this function finds the real location of union folder  ie unraid /mnt/user
@@ -157,6 +214,9 @@ stop_docker_containers() {
 
     if [ "${#stopped_containers[@]}" -gt 0 ]; then
       echo "The container/containers ${stopped_containers[*]} has/have been stopped during conversion and will be restarted afterwards."
+      send_notification "ZFS Dataset Converter" "Docker Containers Stopped" "The following containers were stopped for dataset conversion: ${stopped_containers[*]}
+
+They will be restarted after conversion completes." "warning" "container_vm_stops"
     fi
   fi
 }
@@ -165,6 +225,10 @@ stop_docker_containers() {
 #
 start_docker_containers() {
   if [ "$should_process_containers" = "yes" ]; then
+    if [ "${#stopped_containers[@]}" -gt 0 ]; then
+      send_notification "ZFS Dataset Converter" "Restarting Docker Containers" "Restarting containers that were stopped for conversion: ${stopped_containers[*]}" "normal" "container_vm_stops"
+    fi
+    
     for container_name in "${stopped_containers[@]}"; do
       echo "Restarting Docker container $container_name..."
       if [ "$dry_run" != "yes" ]; then
@@ -278,6 +342,9 @@ done
 
     if [ "${#stopped_vms[@]}" -gt 0 ]; then
       echo "The VM/VMs ${stopped_vms[*]} has/have been stopped during conversion and will be restarted afterwards."
+      send_notification "ZFS Dataset Converter" "Virtual Machines Stopped" "The following VMs were stopped for dataset conversion: ${stopped_vms[*]}
+
+They will be restarted after conversion completes." "warning" "container_vm_stops"
     fi
   fi
 }
@@ -287,6 +354,10 @@ done
 #
 start_virtual_machines() {
   if [ "$should_process_vms" = "yes" ]; then
+    if [ "${#stopped_vms[@]}" -gt 0 ]; then
+      send_notification "ZFS Dataset Converter" "Restarting Virtual Machines" "Restarting VMs that were stopped for conversion: ${stopped_vms[*]}" "normal" "container_vm_stops"
+    fi
+    
     for vm in "${stopped_vms[@]}"; do
       echo "Restarting VM $vm..."
       if [ "$dry_run" != "yes" ]; then
@@ -296,6 +367,76 @@ start_virtual_machines() {
       fi
     done
   fi
+}
+
+#----------------------------------------------------------------------------------    
+# this function performs intelligent validation of copy operations
+#
+perform_validation() {
+    local source_dir="$1"
+    local dest_dir="$2"
+    local operation_name="$3"
+    
+    echo "Validating $operation_name..."
+    
+    source_file_count=$(find "$source_dir" -type f | wc -l)
+    destination_file_count=$(find "$dest_dir" -type f | wc -l)
+    source_total_size=$(du -sb "$source_dir" | cut -f1)
+    destination_total_size=$(du -sb "$dest_dir" | cut -f1)
+    
+    echo "Source files: $source_file_count, Destination files: $destination_file_count"
+    echo "Source total size: $source_total_size, Destination total size: $destination_total_size"
+    
+    # More intelligent validation:
+    # 1. Destination should have at least as many files as source
+    # 2. Destination should have at least as much data as source  
+    # 3. Allow for reasonable differences (up to 5% more files/data in destination)
+    
+    file_diff=$((destination_file_count - source_file_count))
+    size_diff=$((destination_total_size - source_total_size))
+    
+    # Calculate acceptable thresholds (5% more than source)
+    max_extra_files=$((source_file_count / 20))  # 5% of source files
+    max_extra_size=$((source_total_size / 20))   # 5% of source size
+    
+    # Check if destination has fewer files or significantly less data
+    if [ "$destination_file_count" -lt "$source_file_count" ]; then
+        echo "VALIDATION FAILED: Destination has fewer files than source"
+        echo "Missing files: $((source_file_count - destination_file_count))"
+        send_notification "ZFS Dataset Converter" "Validation Failed - Missing Files" "Copy validation failed for: $operation_name
+Source files: $source_file_count
+Destination files: $destination_file_count
+Missing: $((source_file_count - destination_file_count)) files" "alert" "errors"
+        return 1
+    elif [ "$destination_total_size" -lt "$source_total_size" ]; then
+        echo "VALIDATION FAILED: Destination has less data than source"
+        echo "Missing data: $((source_total_size - destination_total_size)) bytes"
+        send_notification "ZFS Dataset Converter" "Validation Failed - Missing Data" "Copy validation failed for: $operation_name
+Source size: $(numfmt --to=iec $source_total_size)
+Destination size: $(numfmt --to=iec $destination_total_size)
+Missing: $(numfmt --to=iec $((source_total_size - destination_total_size)))" "alert" "errors"
+        return 1
+    elif [ "$file_diff" -gt "$max_extra_files" ]; then
+        echo "VALIDATION WARNING: Destination has significantly more files than expected"
+        echo "Extra files: $file_diff (threshold: $max_extra_files)"
+        echo "This might be normal (hidden files, metadata, etc.) but please verify manually"
+        send_notification "ZFS Dataset Converter" "Validation Warning - Extra Files" "Copy validation warning for: $operation_name
+Destination has $file_diff extra files (threshold: $max_extra_files)
+This might be normal but manual verification recommended." "warning" "warnings"
+        return 2  # Warning, but not a failure
+    elif [ "$size_diff" -gt "$max_extra_size" ]; then
+        echo "VALIDATION WARNING: Destination has significantly more data than expected"
+        echo "Extra data: $size_diff bytes (threshold: $max_extra_size bytes)"
+        echo "This might be normal but please verify manually"
+        send_notification "ZFS Dataset Converter" "Validation Warning - Extra Data" "Copy validation warning for: $operation_name
+Destination has $(numfmt --to=iec $size_diff) extra data
+This might be normal but manual verification recommended." "warning" "warnings"
+        return 2  # Warning, but not a failure
+    else
+        echo "VALIDATION SUCCESSFUL: Copy completed successfully"
+        echo "Extra files: $file_diff, Extra data: $size_diff bytes (within acceptable range)"
+        return 0
+    fi
 }
 
 #----------------------------------------------------------------------------------    
@@ -397,6 +538,9 @@ create_datasets() {
     # Check if corresponding dataset exists
     if zfs list -H -o name 2>/dev/null | grep -q "^${dataset_name}$"; then
       echo "Dataset $dataset_name exists. Resuming copy from temp directory..."
+      send_notification "ZFS Dataset Converter" "Resuming Interrupted Conversion" "Resuming conversion for: $temp_base
+From: $tmp_dir
+To: $dataset_name" "normal" "resume_operations"
       
       if [ "$dry_run" != "yes" ]; then
         # Resume the rsync operation
@@ -408,26 +552,29 @@ create_datasets() {
           
           # Perform validation if cleanup is enabled
           if [ "$cleanup" = "yes" ]; then
-            echo "Validating resumed copy..."
-            source_file_count=$(find "$tmp_dir" -type f | wc -l)
-            destination_file_count=$(find "$dataset_mountpoint" -type f | wc -l)
-            source_total_size=$(du -sb "$tmp_dir" | cut -f1)
-            destination_total_size=$(du -sb "$dataset_mountpoint" | cut -f1)
+            perform_validation "$tmp_dir" "$dataset_mountpoint" "resumed copy"
+            validation_result=$?
             
-            if [ "$source_file_count" -eq "$destination_file_count" ] && [ "$source_total_size" -eq "$destination_total_size" ]; then
+            if [ $validation_result -eq 0 ]; then
               echo "Validation successful. Cleaning up temp directory."
               rm -rf "$tmp_dir"
               converted_folders+=("${mount_point}/${source_path}/${temp_base}")
+            elif [ $validation_result -eq 2 ]; then
+              echo "Validation completed with warnings. Manual verification recommended."
+              echo "Temp directory preserved at: $tmp_dir"
+              echo "You can manually remove it after verification with: rm -rf '$tmp_dir'"
             else
               echo "Validation failed for resumed copy. Keeping temp directory."
-              echo "Source files: $source_file_count, Destination files: $destination_file_count"
-              echo "Source total size: $source_total_size, Destination total size: $destination_total_size"
+              echo "Check: $tmp_dir vs $dataset_mountpoint"
             fi
           else
             echo "Cleanup disabled. Keeping temp directory: $tmp_dir"
           fi
         else
           echo "Resume failed for $tmp_dir. Rsync exit status: $rsync_exit_status"
+          send_notification "ZFS Dataset Converter" "Resume Operation Failed" "Failed to resume conversion for: $temp_base
+Temp directory: $tmp_dir
+Rsync exit status: $rsync_exit_status" "alert" "errors"
         fi
       else
         echo "Dry Run: Would resume copy from $tmp_dir to $dataset_mountpoint"
@@ -451,22 +598,26 @@ create_datasets() {
             rsync_exit_status=$?
             
             if [ $rsync_exit_status -eq 0 ] && [ "$cleanup" = "yes" ]; then
-              echo "Copy successful. Validating and cleaning up..."
-              source_file_count=$(find "$tmp_dir" -type f | wc -l)
-              destination_file_count=$(find "$dataset_mountpoint" -type f | wc -l)
-              source_total_size=$(du -sb "$tmp_dir" | cut -f1)
-              destination_total_size=$(du -sb "$dataset_mountpoint" | cut -f1)
+              perform_validation "${mount_point}/${source_path}/${normalized_temp_base}_temp" "${mount_point}/${source_path}/${normalized_temp_base}" "copy operation"
+              validation_result=$?
               
-              if [ "$source_file_count" -eq "$destination_file_count" ] && [ "$source_total_size" -eq "$destination_total_size" ]; then
+              if [ $validation_result -eq 0 ]; then
                 echo "Validation successful. Cleaning up temp directory."
-                rm -rf "$tmp_dir"
+                rm -rf "${mount_point}/${source_path}/${normalized_temp_base}_temp"
                 converted_folders+=("${mount_point}/${source_path}/${temp_base}")
+              elif [ $validation_result -eq 2 ]; then
+                echo "Validation completed with warnings. Manual verification recommended."
+                echo "Temp directory preserved at: ${mount_point}/${source_path}/${normalized_temp_base}_temp"
+                echo "You can manually remove it after verification."
               else
-                echo "Validation failed. Keeping temp directory."
+                echo "Validation failed. Keeping temp directory for investigation."
+                echo "Check: ${mount_point}/${source_path}/${normalized_temp_base}_temp vs ${mount_point}/${source_path}/${normalized_temp_base}"
               fi
             fi
           else
             echo "Failed to create dataset $dataset_name"
+            send_notification "ZFS Dataset Converter" "Dataset Creation Failed" "Failed to create dataset: $dataset_name
+For temp directory: $tmp_dir" "alert" "errors"
           fi
         else
           echo "Dry Run: Would create dataset $dataset_name and copy from $tmp_dir"
@@ -474,6 +625,10 @@ create_datasets() {
       else
         echo "Insufficient space to resume conversion of $tmp_dir"
         echo "Required: $(numfmt --to=iec $buffer_zone_size), Available: $(numfmt --to=iec $(zfs list -o avail -p -H "${source_path}"))"
+        send_notification "ZFS Dataset Converter" "Insufficient Space for Resume" "Cannot resume conversion due to insufficient space:
+Folder: $temp_base
+Required: $(numfmt --to=iec $buffer_zone_size)
+Available: $(numfmt --to=iec $(zfs list -o avail -p -H "${source_path}"))" "warning" "space_issues"
       fi
     fi
     
@@ -510,6 +665,10 @@ create_datasets() {
           # Validate the dataset name before attempting to create it
           if ! validate_dataset_name "$normalized_base_entry"; then
             echo "Skipping folder ${entry} due to invalid dataset name: $normalized_base_entry"
+            send_notification "ZFS Dataset Converter" "Invalid Dataset Name" "Skipping folder due to invalid dataset name:
+Folder: $base_entry
+Normalized: $normalized_base_entry
+Path: $entry" "warning" "warnings"
             continue
           fi
           
@@ -520,31 +679,44 @@ create_datasets() {
               rsync -a "${mount_point}/${source_path}/${normalized_base_entry}_temp/" "${mount_point}/${source_path}/${normalized_base_entry}/"
               rsync_exit_status=$?
               if [ "$cleanup" = "yes" ] && [ $rsync_exit_status -eq 0 ]; then
-                echo "Validating copy..."
-                source_file_count=$(find "${mount_point}/${source_path}/${normalized_base_entry}_temp" -type f | wc -l)
-                destination_file_count=$(find "${mount_point}/${source_path}/${normalized_base_entry}" -type f | wc -l)
-                source_total_size=$(du -sb "${mount_point}/${source_path}/${normalized_base_entry}_temp" | cut -f1)
-                destination_total_size=$(du -sb "${mount_point}/${source_path}/${normalized_base_entry}" | cut -f1)
-                if [ "$source_file_count" -eq "$destination_file_count" ] && [ "$source_total_size" -eq "$destination_total_size" ]; then
+                perform_validation "${mount_point}/${source_path}/${normalized_base_entry}_temp" "${mount_point}/${source_path}/${normalized_base_entry}" "copy operation"
+                validation_result=$?
+                
+                if [ $validation_result -eq 0 ]; then
                   echo "Validation successful, cleanup can proceed."
                   rm -r "${mount_point}/${source_path}/${normalized_base_entry}_temp"
                   converted_folders+=("$entry")  # Save the name of the converted folder
+                elif [ $validation_result -eq 2 ]; then
+                  echo "Validation completed with warnings. Manual verification recommended."
+                  echo "Temp directory preserved at: ${mount_point}/${source_path}/${normalized_base_entry}_temp"
+                  echo "You can manually remove it after verification."
+                  converted_folders+=("$entry")  # Still count as converted since data is there
                 else
-                  echo "Validation failed. Source and destination file count or total size do not match."
-                  echo "Source files: $source_file_count, Destination files: $destination_file_count"
-                  echo "Source total size: $source_total_size, Destination total size: $destination_total_size"
+                  echo "Validation failed. Source and destination do not match adequately."
+                  echo "Temp directory preserved for investigation: ${mount_point}/${source_path}/${normalized_base_entry}_temp"
                 fi
               elif [ "$cleanup" = "no" ]; then
-                echo "Cleanup is disabled.. Skipping cleanup for ${entry}"
+                echo "Cleanup is disabled. Skipping cleanup for ${entry}"
+                converted_folders+=("$entry")
               else
                 echo "Rsync encountered an error. Skipping cleanup for ${entry}"
               fi
             else
               echo "Failed to create new dataset ${source_path}/${normalized_base_entry}"
+              send_notification "ZFS Dataset Converter" "Dataset Creation Failed" "Failed to create new dataset:
+Dataset: ${source_path}/${normalized_base_entry}
+Source folder: $entry" "alert" "errors"
             fi
           fi
         else
           echo "Skipping folder ${entry} due to insufficient space"
+          available_space=$(numfmt --to=iec $(zfs list -o avail -p -H "${source_path}"))
+          required_space=$(numfmt --to=iec $buffer_zone_size)
+          send_notification "ZFS Dataset Converter" "Insufficient Space - Folder Skipped" "Skipping folder due to insufficient space:
+Folder: $base_entry ($folder_size_hr)
+Required: $required_space
+Available: $available_space
+Path: $entry" "warning" "space_issues"
         fi
       fi
     fi
@@ -575,6 +747,9 @@ can_i_go_to_work() {
         echo "If you're expecting to process 'appdata' or VMs, ensure the respective variables are set to 'yes'."
         echo "For other datasets, please add their paths to 'source_datasets_array'."
         echo "No work for me to do. Exiting..."
+        send_notification "ZFS Dataset Converter" "Script Configuration Error" "No sources defined for conversion. Check script configuration:
+- Set should_process_containers or should_process_vms to 'yes'
+- Add paths to source_datasets_array" "alert" "errors"
         exit 1
     fi
 
@@ -586,12 +761,16 @@ can_i_go_to_work() {
         # Check if source exists
         if [[ ! -e "${mount_point}/${source_path}" ]]; then
             echo "Error: Source ${mount_point}/${source_path} does not exist. Please ensure the specified path is correct."
+            send_notification "ZFS Dataset Converter" "Source Path Error" "Source path does not exist: ${mount_point}/${source_path}
+Please verify the configuration." "alert" "errors"
             exit 1
         fi
         
         # Check if source is a dataset
         if ! zfs list -o name | grep -q "^${source_path}$"; then
             echo "Error: Source ${source_path} is a folder. Sources must be a dataset to host child datasets. Please verify your configuration."
+            send_notification "ZFS Dataset Converter" "Source Dataset Error" "Source must be a dataset, not a folder: ${source_path}
+Please verify your configuration." "alert" "errors"
             exit 1
         else
             echo "Source ${source_path} is a dataset and valid for processing ..."
@@ -635,6 +814,14 @@ done
 #--------------------------------
 #    RUN THE FUNCTIONS          #
 #--------------------------------
+
+# Send script start notification
+if [ "$dry_run" = "yes" ]; then
+  send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Started (DRY RUN)" "Script started in dry run mode. No actual changes will be made." "normal" "script_start"
+else
+  send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Started" "Script started. Converting folders to ZFS datasets." "normal" "script_start"
+fi
+
 can_i_go_to_work
 stop_docker_containers
 stop_virtual_machines
@@ -642,3 +829,17 @@ convert
 start_docker_containers
 start_virtual_machines
 print_new_datasets
+
+# Send script completion notification
+total_converted=${#converted_folders[@]}
+if [ "$total_converted" -gt 0 ]; then
+  conversion_list=$(printf '%s\n' "${converted_folders[@]}")
+  send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Completed Successfully" "Script completed successfully. $total_converted folders converted to datasets:
+
+$conversion_list" "normal" "script_completion"
+  
+  # Send conversion summary if enabled
+  send_notification "ZFS Dataset Converter" "Conversion Summary: $total_converted Folders Converted" "$conversion_list" "normal" "conversion_summary"
+else
+  send_notification "ZFS Dataset Converter" "ZFS Dataset Converter Completed" "Script completed. No folders needed conversion - all are already datasets." "normal" "script_completion"
+fi
