@@ -2,12 +2,15 @@
 
 
 This script is  for  converting directories into ZFS datasets on an Unraid server and runs in the User Scripts plugin.
-It's proficient in processing appdata from Docker Containers, vdisks from VMs and various other locations within a single run. For directories storing appdata or VM vdisk data, the script is able to detect active containers or VMs that are using these folders. It will automatically stop these containers or VMs prior to initiating the conversion.
-Set to operate on a schedule via Unraid user scripts, this tool then can continue to monitor datasets, making certain that their associated child folders remain as datasets. This is especially valuable when, for instance, installing a new container: its appdata will be converted automatically. Such functionality is invaluable for users keen on snapshotting individual containers, VMs, or various data structures.
+It's proficient in processing appdata from Docker Containers, vdisks from VMs and various other locations within a single run.
+
+For directories storing appdata or VM vdisk data, the script is able to detect active containers or VMs that are using these folders. It will automatically stop these containers or VMs prior to initiating the conversion.
+
+Set to operate on a schedule via Unraid user scripts, this tool then can continue to monitor datasets, making certain that their associated child folders remain as datasets. When, for example, creating a new Docker container, its appdata will be converted automatically when this script runs. Such functionality is invaluable for users keen on snapshotting individual containers, VMs, or various data structures.
 
 ## Overview
 
-The script will do the following
+The script will do the following:
 
 -   Evaluate whether a directory qualifies for conversion from a folder to a ZFS dataset.
 -   Intelligently stop relevant Docker containers or VMs that are tied to directories earmarked for ZFS dataset conversion.
